@@ -12,7 +12,7 @@
 // 50 milliseconds
 #define THREAD_TIMER 50000  
 
-// Define register indices for 64-bit system
+// register indices
 #define JB_RBX 0
 #define JB_RBP 1
 #define JB_R12 2
@@ -39,19 +39,18 @@ typedef struct {
     void *arg;
 } TCB;
 
-// Global state
+// Global state !
 static TCB thread_table[MAX_THREADS];
 static int current_thread_index = 0;
 static bool initialized = false;
 
-// Forward declarations
 static void schedule(void);
 static void sigalrm_handler(int sig);
 static void thread_wrapper(void);
 static void init_thread_system(void);
 static long int i64_ptr_mangle(long int p);
 
-// Pointer mangling from canvas
+//from canvas
 static long int i64_ptr_mangle(long int p) {
     long int ret;
     asm(" mov %1, %%rax;\n"
@@ -65,7 +64,7 @@ static long int i64_ptr_mangle(long int p) {
     return ret;
 }
 
-// Initialize threading system
+// Initialize
 static void init_thread_system(void) {
     if (initialized) {
         return;
@@ -93,7 +92,6 @@ static void init_thread_system(void) {
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = sigalrm_handler;
 
-    // cant block SIGALRM during handler
     sa.sa_flags = SA_NODEFER;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGALRM, &sa, NULL);
@@ -123,7 +121,6 @@ static void thread_wrapper(void) {
 // Create new thread
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr, 
                    void *(*start_routine)(void*), void *arg) {
-    // Initialize thread 
     if (!initialized) {
         init_thread_system();
     }
@@ -165,10 +162,8 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     // Set program counter to thread_wrapper
     jb[JB_PC] = i64_ptr_mangle((long int)thread_wrapper);
     
-    // Set stack pointer to top of new stack
-    
     unsigned long stack_address = (unsigned long)stack_top;
-    stack_address &= ~0xFUL;  // Align to 16 bytes based on x86 64 regulations
+    stack_address &= ~0xFUL;  // Align to 16 bytes
     jb[JB_RSP] = i64_ptr_mangle(stack_address);
     
     // Return thread ID
@@ -182,7 +177,7 @@ void pthread_exit(void *value_ptr) {
     TCB *tcb = &thread_table[current_thread_index];
     tcb->state = THREAD_EXITED;
     
-    // Check if all threads have exited
+    // Check if all threads exited
     bool all_exited = true;
     for (int i = 0; i < MAX_THREADS; i++) {
         if (thread_table[i].state != THREAD_EXITED) {
@@ -208,7 +203,7 @@ pthread_t pthread_self(void) {
     return thread_table[current_thread_index].thread_id;
 }
 
-// Round-robin scheduler
+// Round-robin
 static void schedule(void) {
     int prev_thread_idx = current_thread_index;
     
@@ -248,11 +243,11 @@ static void schedule(void) {
     current_thread_index = next_thread_idx;
     thread_table[current_thread_index].state = THREAD_RUNNING;
     
-    // Restore next thread's context
+    // get next thread's context
     longjmp(thread_table[current_thread_index].context, 1);
 }
 
-// Signal handler for SIGALRM (timer interrupt)
+// Signal handler for SIGALRM 
 static void sigalrm_handler(int sig) {
     schedule();
 }
