@@ -131,7 +131,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     // Find a slot in thread table
     int new_thread_idx = -1;
     for (int i = 0; i < MAX_THREADS; i++) {
-        if (thread_table[i].state == THREAD_EXITED && thread_table[i].stack == NULL) {
+        if (thread_table[i].state == THREAD_EXITED) {
             new_thread_idx = i;
             break;
         }
@@ -181,12 +181,6 @@ void pthread_exit(void *value_ptr) {
     // Mark current thread as exited
     TCB *tcb = &thread_table[current_thread_idx];
     tcb->state = THREAD_EXITED;
-    
-    // Free the stack memory
-    if (tcb->stack != NULL) {
-        free(tcb->stack);
-        tcb->stack = NULL;
-    }
     
     // Check if all threads have exited
     bool all_exited = true;
