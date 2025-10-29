@@ -10,7 +10,7 @@
 #define STACK_SIZE 32767
 
 // 50 milliseconds
-#define QUANTUM_USEC 50000  
+#define THREAD_TIMER 50000  
 
 // Define register indices for 64-bit system
 #define JB_RBX 0
@@ -41,7 +41,7 @@ typedef struct {
 
 // Global state
 static TCB thread_table[MAX_THREADS];
-static int current_thread_idx = 0;
+static int current_thread_index = 0;
 static bool initialized = false;
 
 // Forward declarations
@@ -86,7 +86,7 @@ static void init_thread_system(void) {
     thread_table[0].start_routine = NULL;
     thread_table[0].arg = NULL;
     
-    current_thread_idx = 0;
+    current_thread_index = 0;
     
     // signal handler for SIGALRM
     struct sigaction sa;
@@ -101,9 +101,9 @@ static void init_thread_system(void) {
     // Set up timer for round robin
     struct itimerval timer;
     timer.it_value.tv_sec = 0;
-    timer.it_value.tv_usec = QUANTUM_USEC;
+    timer.it_value.tv_usec = THREAD_TIMER;
     timer.it_interval.tv_sec = 0;
-    timer.it_interval.tv_usec = QUANTUM_USEC;
+    timer.it_interval.tv_usec = THREAD_TIMER;
     setitimer(ITIMER_REAL, &timer, NULL);
     
     initialized = true;
@@ -112,7 +112,7 @@ static void init_thread_system(void) {
 // runs when thread starts
 static void thread_wrapper(void) {
     // Get TCB of current thread
-    TCB *tcb = &thread_table[current_thread_idx];
+    TCB *tcb = &thread_table[current_thread_index];
     
     void *result = tcb->start_routine(tcb->arg);
     
@@ -129,15 +129,15 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     }
     
     // Find a slot in thread table
-    int new_thread_idx = -1;
+    int new_thread_index = -1;
     for (int i = 0; i < MAX_THREADS; i++) {
         if (thread_table[i].state == THREAD_EXITED) {
-            new_thread_idx = i;
+            new_thread_index = i;
             break;
         }
     }
     
-    if (new_thread_idx == -1) {
+    if (new_thread_index == -1) {
         return -1;  // No spots left :(
     }
     
@@ -148,8 +148,8 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     }
     
     // Initialize TCB
-    TCB *tcb = &thread_table[new_thread_idx];
-    tcb->thread_id = new_thread_idx;
+    TCB *tcb = &thread_table[new_thread_index];
+    tcb->thread_id = new_thread_index;
     tcb->state = THREAD_READY;
     tcb->stack = stack;
     tcb->start_routine = start_routine;
@@ -167,9 +167,9 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     
     // Set stack pointer to top of new stack
     
-    unsigned long stack_addr = (unsigned long)stack_top;
-    stack_addr &= ~0xFUL;  // Align to 16 bytes based on x86 64 regulations
-    jb[JB_RSP] = i64_ptr_mangle(stack_addr);
+    unsigned long stack_address = (unsigned long)stack_top;
+    stack_address &= ~0xFUL;  // Align to 16 bytes based on x86 64 regulations
+    jb[JB_RSP] = i64_ptr_mangle(stack_address);
     
     // Return thread ID
     *thread = tcb->thread_id;
@@ -179,7 +179,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 
 void pthread_exit(void *value_ptr) {
     // Mark current thread as exited
-    TCB *tcb = &thread_table[current_thread_idx];
+    TCB *tcb = &thread_table[current_thread_index];
     tcb->state = THREAD_EXITED;
     
     // Check if all threads have exited
@@ -205,12 +205,12 @@ pthread_t pthread_self(void) {
     if (!initialized) {
         init_thread_system();
     }
-    return thread_table[current_thread_idx].thread_id;
+    return thread_table[current_thread_index].thread_id;
 }
 
 // Round-robin scheduler
 static void schedule(void) {
-    int prev_thread_idx = current_thread_idx;
+    int prev_thread_idx = current_thread_index;
     
     if (thread_table[prev_thread_idx].state != THREAD_EXITED) {
         // Save current thread context
@@ -225,7 +225,7 @@ static void schedule(void) {
     
     // round robin
     int next_thread_idx = -1;
-    int search_start = (current_thread_idx + 1) % MAX_THREADS;
+    int search_start = (current_thread_index + 1) % MAX_THREADS;
     
     for (int i = 0; i < MAX_THREADS; i++) {
         int idx = (search_start + i) % MAX_THREADS;
@@ -236,8 +236,8 @@ static void schedule(void) {
     }
     
     if (next_thread_idx == -1) {
-        if (thread_table[current_thread_idx].state == THREAD_READY) {
-            next_thread_idx = current_thread_idx;
+        if (thread_table[current_thread_index].state == THREAD_READY) {
+            next_thread_idx = current_thread_index;
         } else {
             // shouldnt happen
             exit(1);
@@ -245,11 +245,11 @@ static void schedule(void) {
     }
     
     // Switch to next thread
-    current_thread_idx = next_thread_idx;
-    thread_table[current_thread_idx].state = THREAD_RUNNING;
+    current_thread_index = next_thread_idx;
+    thread_table[current_thread_index].state = THREAD_RUNNING;
     
     // Restore next thread's context
-    longjmp(thread_table[current_thread_idx].context, 1);
+    longjmp(thread_table[current_thread_index].context, 1);
 }
 
 // Signal handler for SIGALRM (timer interrupt)
