@@ -42,7 +42,6 @@ typedef struct {
 // Global state
 static TCB thread_table[MAX_THREADS];
 static int current_thread_idx = 0;
-static int num_threads = 0;
 static bool initialized = false;
 
 // Forward declarations
@@ -88,7 +87,6 @@ static void init_thread_system(void) {
     thread_table[0].arg = NULL;
     
     current_thread_idx = 0;
-    num_threads = 1;
     
     // signal handler for SIGALRM
     struct sigaction sa;
@@ -173,11 +171,6 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     stack_addr &= ~0xFUL;  // Align to 16 bytes based on x86 64 regulations
     jb[JB_RSP] = i64_ptr_mangle(stack_addr);
     
-    // global thread count ++
-    if (new_thread_idx >= num_threads) {
-        num_threads = new_thread_idx + 1;
-    }
-    
     // Return thread ID
     *thread = tcb->thread_id;
     
@@ -197,7 +190,7 @@ void pthread_exit(void *value_ptr) {
     
     // Check if all threads have exited
     bool all_exited = true;
-    for (int i = 0; i < num_threads; i++) {
+    for (int i = 0; i < MAX_THREADS; i++) {
         if (thread_table[i].state != THREAD_EXITED) {
             all_exited = false;
             break;
@@ -238,10 +231,10 @@ static void schedule(void) {
     
     // round robin
     int next_thread_idx = -1;
-    int search_start = (current_thread_idx + 1) % num_threads;
+    int search_start = (current_thread_idx + 1) % MAX_THREADS;
     
-    for (int i = 0; i < num_threads; i++) {
-        int idx = (search_start + i) % num_threads;
+    for (int i = 0; i < MAX_THREADS; i++) {
+        int idx = (search_start + i) % MAX_THREADS;
         if (thread_table[idx].state == THREAD_READY) {
             next_thread_idx = idx;
             break;
